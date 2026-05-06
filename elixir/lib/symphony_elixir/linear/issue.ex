@@ -15,6 +15,7 @@ defmodule SymphonyElixir.Linear.Issue do
     :assignee_id,
     blocked_by: [],
     labels: [],
+    pull_requests: [],
     assigned_to_worker: true,
     created_at: nil,
     updated_at: nil
@@ -31,6 +32,7 @@ defmodule SymphonyElixir.Linear.Issue do
           url: String.t() | nil,
           assignee_id: String.t() | nil,
           labels: [String.t()],
+          pull_requests: [map()],
           assigned_to_worker: boolean(),
           created_at: DateTime.t() | nil,
           updated_at: DateTime.t() | nil

@@ -114,6 +114,12 @@ defmodule SymphonyElixir.TestSupport do
           codex_turn_timeout_ms: 3_600_000,
           codex_read_timeout_ms: 5_000,
           codex_stall_timeout_ms: 300_000,
+          slack_bot_token: nil,
+          slack_blocked_audit_channel: "C0ADCCYAY2V",
+          slack_manager_mention: "AJ Marz",
+          blocked_audit_pause_threshold: 5,
+          blocked_audit_anomaly_threshold: 10,
+          blocked_audit_state_file: nil,
           hook_after_create: nil,
           hook_before_run: nil,
           hook_after_run: nil,
@@ -151,6 +157,12 @@ defmodule SymphonyElixir.TestSupport do
     codex_turn_timeout_ms = Keyword.get(config, :codex_turn_timeout_ms)
     codex_read_timeout_ms = Keyword.get(config, :codex_read_timeout_ms)
     codex_stall_timeout_ms = Keyword.get(config, :codex_stall_timeout_ms)
+    slack_bot_token = Keyword.get(config, :slack_bot_token)
+    slack_blocked_audit_channel = Keyword.get(config, :slack_blocked_audit_channel)
+    slack_manager_mention = Keyword.get(config, :slack_manager_mention)
+    blocked_audit_pause_threshold = Keyword.get(config, :blocked_audit_pause_threshold)
+    blocked_audit_anomaly_threshold = Keyword.get(config, :blocked_audit_anomaly_threshold)
+    blocked_audit_state_file = Keyword.get(config, :blocked_audit_state_file)
     hook_after_create = Keyword.get(config, :hook_after_create)
     hook_before_run = Keyword.get(config, :hook_before_run)
     hook_after_run = Keyword.get(config, :hook_after_run)
@@ -192,6 +204,14 @@ defmodule SymphonyElixir.TestSupport do
         "  turn_timeout_ms: #{yaml_value(codex_turn_timeout_ms)}",
         "  read_timeout_ms: #{yaml_value(codex_read_timeout_ms)}",
         "  stall_timeout_ms: #{yaml_value(codex_stall_timeout_ms)}",
+        "slack:",
+        "  bot_token: #{yaml_value(slack_bot_token)}",
+        "  blocked_audit_channel: #{yaml_value(slack_blocked_audit_channel)}",
+        "  manager_mention: #{yaml_value(slack_manager_mention)}",
+        "blocked_audit:",
+        "  pause_threshold: #{yaml_value(blocked_audit_pause_threshold)}",
+        "  anomaly_threshold: #{yaml_value(blocked_audit_anomaly_threshold)}",
+        "  state_file: #{yaml_value(blocked_audit_state_file)}",
         hooks_yaml(hook_after_create, hook_before_run, hook_after_run, hook_before_remove, hook_timeout_ms),
         observability_yaml(observability_enabled, observability_refresh_ms, observability_render_interval_ms),
         server_yaml(server_port, server_host),

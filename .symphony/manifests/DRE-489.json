@@ -1,0 +1,76 @@
+{
+  "issue_id": "DRE-489",
+  "branch": "dreamydrawphx/dre-489-blocked-audit-backoff",
+  "updated_at": "2026-05-06T00:18:39Z",
+  "runtime_targets": ["workflow", "elixir"],
+  "touched_files": [
+    ".symphony/manifests/DRE-489.json",
+    "SPEC.md",
+    "elixir/README.md",
+    "elixir/WORKFLOW.md",
+    "elixir/lib/symphony_elixir/agent_runner.ex",
+    "elixir/lib/symphony_elixir/blocked_audit.ex",
+    "elixir/lib/symphony_elixir/config/schema.ex",
+    "elixir/lib/symphony_elixir/linear/client.ex",
+    "elixir/lib/symphony_elixir/linear/issue.ex",
+    "elixir/lib/symphony_elixir/orchestrator.ex",
+    "elixir/lib/symphony_elixir/slack_notifier.ex",
+    "elixir/test/support/test_support.exs",
+    "elixir/test/symphony_elixir/blocked_audit_test.exs",
+    "elixir/test/symphony_elixir/core_test.exs",
+    "elixir/test/symphony_elixir/workspace_and_config_test.exs"
+  ],
+  "generated_artifacts": [],
+  "artifact_paths": ["elixir/cover/"],
+  "validation_commands": [
+    {
+      "command": "mise trust",
+      "purpose": "Trust repo-local mise config for the isolated DRE-489 worktree",
+      "environment": "production-capable Symphony worktree",
+      "status": "passed"
+    },
+    {
+      "command": "mise exec -- mix deps.get",
+      "purpose": "Fetch Elixir dependencies in the fresh DRE-489 worktree",
+      "environment": "production-capable Symphony worktree",
+      "status": "passed"
+    },
+    {
+      "command": "mise exec -- mix test test/symphony_elixir/blocked_audit_test.exs",
+      "purpose": "Verify blocked signature persistence, pause/anomaly thresholds, dedupe, and resume-on-signature-change",
+      "environment": "production-capable Symphony worktree",
+      "status": "passed"
+    },
+    {
+      "command": "mise exec -- mix test test/symphony_elixir/core_test.exs",
+      "purpose": "Verify config defaults and orchestrator core behavior after adding blocked_audit/slack config",
+      "environment": "production-capable Symphony worktree",
+      "status": "passed"
+    },
+    {
+      "command": "mise exec -- mix test test/symphony_elixir/workspace_and_config_test.exs test/symphony_elixir/ssh_test.exs",
+      "purpose": "Verify Linear normalization updates and rerun a previously timing-sensitive SSH fake-trace test",
+      "environment": "production-capable Symphony worktree",
+      "status": "passed"
+    },
+    {
+      "command": "mise exec -- make fmt-check lint test",
+      "purpose": "Run format check, Credo/spec lint, and full ExUnit suite",
+      "environment": "production-capable Symphony worktree",
+      "status": "passed"
+    },
+    {
+      "command": "mise exec -- make build && mise exec -- mix specs.check",
+      "purpose": "Build the Symphony escript and verify public lib functions have specs",
+      "environment": "production-capable Symphony worktree",
+      "status": "passed"
+    },
+    {
+      "command": "mise exec -- make all",
+      "purpose": "Run the full Symphony quality gate: setup, build, format, lint, coverage, and dialyzer",
+      "environment": "production-capable Symphony worktree",
+      "status": "passed"
+    }
+  ],
+  "notes": "Owned scope is isolated in /Users/dreamy/.openclaw/workspace/.pr-worktrees/symphony-DRE-489. An initial combined focused test run hit an existing retry timing assertion by 10ms, and the first full suite run hit a fake SSH trace timeout; both passed on targeted rerun and the final full fmt/lint/test gate passed."
+}

@@ -17,6 +17,10 @@ defmodule SymphonyElixir.CoreTest do
     assert config.tracker.terminal_states == ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]
     assert config.tracker.assignee == nil
     assert config.agent.max_turns == 20
+    assert config.blocked_audit.pause_threshold == 5
+    assert config.blocked_audit.anomaly_threshold == 10
+    assert config.slack.blocked_audit_channel == "C0ADCCYAY2V"
+    assert config.slack.manager_mention == "AJ Marz"
 
     write_workflow_file!(Workflow.workflow_file_path(), poll_interval_ms: "invalid")
 
@@ -36,6 +40,18 @@ defmodule SymphonyElixir.CoreTest do
 
     write_workflow_file!(Workflow.workflow_file_path(), max_turns: 5)
     assert Config.settings!().agent.max_turns == 5
+
+    write_workflow_file!(Workflow.workflow_file_path(), blocked_audit_pause_threshold: 0)
+    assert {:error, {:invalid_workflow_config, message}} = Config.validate!()
+    assert message =~ "blocked_audit.pause_threshold"
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      blocked_audit_pause_threshold: 5,
+      blocked_audit_anomaly_threshold: 4
+    )
+
+    assert {:error, {:invalid_workflow_config, message}} = Config.validate!()
+    assert message =~ "blocked_audit.anomaly_threshold"
 
     write_workflow_file!(Workflow.workflow_file_path(), tracker_active_states: "Todo,  Review,")
     assert {:error, {:invalid_workflow_config, message}} = Config.validate!()

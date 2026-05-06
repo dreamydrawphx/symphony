@@ -28,6 +28,13 @@ hooks:
 agent:
   max_concurrent_agents: 10
   max_turns: 20
+slack:
+  bot_token: "$SLACK_BOT_TOKEN"
+  blocked_audit_channel: "C0ADCCYAY2V"
+  manager_mention: "AJ Marz"
+blocked_audit:
+  pause_threshold: 5
+  anomaly_threshold: 10
 codex:
   command: codex --config shell_environment_policy.inherit=all --config 'model="gpt-5.5"' --config model_reasoning_effort=xhigh app-server
   approval_policy: never
