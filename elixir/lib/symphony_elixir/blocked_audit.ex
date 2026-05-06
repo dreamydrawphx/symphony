@@ -75,6 +75,7 @@ defmodule SymphonyElixir.BlockedAudit do
     same_signature? = Map.get(existing, "signature_hash") == signature_hash
     count = if same_signature?, do: Map.get(existing, "same_blocked_audit_count", 0) + 1, else: 1
     notified_thresholds = if same_signature?, do: Map.get(existing, "notified_thresholds", []), else: []
+    commented_thresholds = if same_signature?, do: Map.get(existing, "commented_thresholds", []), else: []
     paused = count >= thresholds().pause
 
     entry = %{
@@ -85,6 +86,7 @@ defmodule SymphonyElixir.BlockedAudit do
       "same_blocked_audit_count" => count,
       "paused" => paused,
       "notified_thresholds" => notified_thresholds,
+      "commented_thresholds" => commented_thresholds,
       "last_audited_at" => now,
       "updated_at" => now
     }
@@ -109,15 +111,30 @@ defmodule SymphonyElixir.BlockedAudit do
        when is_integer(threshold) and threshold > 0 do
     count = Map.get(entry, "same_blocked_audit_count", 0)
     notified_thresholds = Map.get(entry, "notified_thresholds", [])
+    commented_thresholds = Map.get(entry, "commented_thresholds", [])
     threshold_key = to_string(threshold)
 
     if count >= threshold and threshold_key not in notified_thresholds do
-      post_manager_summary(issue, entry, threshold, level)
-      send_slack_alert(issue, entry, threshold, level)
+      entry =
+        if threshold_key in commented_thresholds do
+          entry
+        else
+          post_manager_summary(issue, entry, threshold, level)
 
-      updated_entry = Map.put(entry, "notified_thresholds", Enum.uniq([threshold_key | notified_thresholds]))
-      persist_entry(issue.id, updated_entry)
-      updated_entry
+          entry
+          |> Map.put("commented_thresholds", Enum.uniq([threshold_key | commented_thresholds]))
+          |> tap(&persist_entry(issue.id, &1))
+        end
+
+      slack_result = send_slack_alert(issue, entry, threshold, level)
+
+      if slack_result == :ok do
+        updated_entry = Map.put(entry, "notified_thresholds", Enum.uniq([threshold_key | notified_thresholds]))
+        persist_entry(issue.id, updated_entry)
+        updated_entry
+      else
+        entry
+      end
     else
       entry
     end
@@ -147,6 +164,7 @@ defmodule SymphonyElixir.BlockedAudit do
 
       {:error, reason} ->
         Logger.warning("Failed to send blocked-audit Slack alert issue_id=#{issue.id} threshold=#{threshold}: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 

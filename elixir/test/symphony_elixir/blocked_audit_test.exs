@@ -8,11 +8,18 @@ defmodule SymphonyElixir.BlockedAuditTest do
     state_file = Path.join(System.tmp_dir!(), "blocked-audit-#{System.unique_integer([:positive])}.json")
     Application.put_env(:symphony_elixir, :memory_tracker_recipient, self())
 
+    Application.put_env(:symphony_elixir, :slack_request_fun, fn _url, _opts ->
+      {:ok, %{status: 200, body: %{"ok" => true}}}
+    end)
+
+    on_exit(fn -> Application.delete_env(:symphony_elixir, :slack_request_fun) end)
+
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_kind: "memory",
       blocked_audit_pause_threshold: 2,
       blocked_audit_anomaly_threshold: 3,
-      blocked_audit_state_file: state_file
+      blocked_audit_state_file: state_file,
+      slack_bot_token: "token"
     )
 
     issue = blocked_issue()
@@ -174,6 +181,43 @@ defmodule SymphonyElixir.BlockedAuditTest do
     )
 
     assert {:ok, %{decision: :paused}} = BlockedAudit.evaluate_issue(blocked_issue())
+  end
+
+  test "threshold alert is retried when Slack delivery fails before dedupe is recorded" do
+    state_file = Path.join(System.tmp_dir!(), "blocked-audit-slack-retry-#{System.unique_integer([:positive])}.json")
+    Application.put_env(:symphony_elixir, :memory_tracker_recipient, self())
+
+    on_exit(fn -> Application.delete_env(:symphony_elixir, :slack_request_fun) end)
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "memory",
+      blocked_audit_pause_threshold: 1,
+      blocked_audit_anomaly_threshold: 99,
+      blocked_audit_state_file: state_file,
+      slack_bot_token: "token"
+    )
+
+    Application.put_env(:symphony_elixir, :slack_request_fun, fn _url, _opts ->
+      send(self(), :slack_attempt)
+      {:ok, %{status: 200, body: %{"ok" => false, "error" => "rate_limited"}}}
+    end)
+
+    assert {:ok, %{decision: :paused}} = BlockedAudit.evaluate_issue(blocked_issue())
+    assert_receive :slack_attempt, 1_000
+
+    store = state_file |> File.read!() |> Jason.decode!()
+    assert store["issue-1"]["notified_thresholds"] == []
+
+    Application.put_env(:symphony_elixir, :slack_request_fun, fn _url, _opts ->
+      send(self(), :slack_retry)
+      {:ok, %{status: 200, body: %{"ok" => true}}}
+    end)
+
+    assert {:ok, %{decision: :paused}} = BlockedAudit.evaluate_issue(blocked_issue())
+    assert_receive :slack_retry, 1_000
+
+    store = state_file |> File.read!() |> Jason.decode!()
+    assert store["issue-1"]["notified_thresholds"] == ["1"]
   end
 
   test "slack notifier maps Slack API responses" do
