@@ -65,6 +65,58 @@ defmodule SymphonyElixir.Config.Schema do
     end
   end
 
+  defmodule Slack do
+    @moduledoc false
+    use Ecto.Schema
+    import Ecto.Changeset
+
+    @primary_key false
+    embedded_schema do
+      field(:bot_token, :string)
+      field(:blocked_audit_channel, :string, default: "C0ADCCYAY2V")
+      field(:manager_mention, :string, default: "AJ Marz")
+    end
+
+    @spec changeset(%__MODULE__{}, map()) :: Ecto.Changeset.t()
+    def changeset(schema, attrs) do
+      schema
+      |> cast(attrs, [:bot_token, :blocked_audit_channel, :manager_mention], empty_values: [])
+    end
+  end
+
+  defmodule BlockedAudit do
+    @moduledoc false
+    use Ecto.Schema
+    import Ecto.Changeset
+
+    @primary_key false
+    embedded_schema do
+      field(:pause_threshold, :integer, default: 5)
+      field(:anomaly_threshold, :integer, default: 10)
+      field(:state_file, :string)
+    end
+
+    @spec changeset(%__MODULE__{}, map()) :: Ecto.Changeset.t()
+    def changeset(schema, attrs) do
+      schema
+      |> cast(attrs, [:pause_threshold, :anomaly_threshold, :state_file], empty_values: [])
+      |> validate_number(:pause_threshold, greater_than: 0)
+      |> validate_number(:anomaly_threshold, greater_than: 0)
+      |> validate_threshold_order()
+    end
+
+    defp validate_threshold_order(changeset) do
+      pause_threshold = get_field(changeset, :pause_threshold)
+      anomaly_threshold = get_field(changeset, :anomaly_threshold)
+
+      if is_integer(pause_threshold) and is_integer(anomaly_threshold) and anomaly_threshold < pause_threshold do
+        add_error(changeset, :anomaly_threshold, "must be greater than or equal to pause_threshold")
+      else
+        changeset
+      end
+    end
+  end
+
   defmodule Polling do
     @moduledoc false
     use Ecto.Schema
@@ -268,6 +320,8 @@ defmodule SymphonyElixir.Config.Schema do
     embeds_one(:worker, Worker, on_replace: :update, defaults_to_struct: true)
     embeds_one(:agent, Agent, on_replace: :update, defaults_to_struct: true)
     embeds_one(:codex, Codex, on_replace: :update, defaults_to_struct: true)
+    embeds_one(:slack, Slack, on_replace: :update, defaults_to_struct: true)
+    embeds_one(:blocked_audit, BlockedAudit, on_replace: :update, defaults_to_struct: true)
     embeds_one(:hooks, Hooks, on_replace: :update, defaults_to_struct: true)
     embeds_one(:observability, Observability, on_replace: :update, defaults_to_struct: true)
     embeds_one(:server, Server, on_replace: :update, defaults_to_struct: true)
@@ -360,6 +414,8 @@ defmodule SymphonyElixir.Config.Schema do
     |> cast_embed(:worker, with: &Worker.changeset/2)
     |> cast_embed(:agent, with: &Agent.changeset/2)
     |> cast_embed(:codex, with: &Codex.changeset/2)
+    |> cast_embed(:slack, with: &Slack.changeset/2)
+    |> cast_embed(:blocked_audit, with: &BlockedAudit.changeset/2)
     |> cast_embed(:hooks, with: &Hooks.changeset/2)
     |> cast_embed(:observability, with: &Observability.changeset/2)
     |> cast_embed(:server, with: &Server.changeset/2)
@@ -383,7 +439,21 @@ defmodule SymphonyElixir.Config.Schema do
         turn_sandbox_policy: normalize_optional_map(settings.codex.turn_sandbox_policy)
     }
 
-    %{settings | tracker: tracker, workspace: workspace, codex: codex}
+    slack = %{
+      settings.slack
+      | bot_token: resolve_secret_setting(settings.slack.bot_token, System.get_env("SLACK_BOT_TOKEN"))
+    }
+
+    blocked_audit = %{
+      settings.blocked_audit
+      | state_file: resolve_path_value(settings.blocked_audit.state_file, blocked_audit_default_state_file(workspace.root))
+    }
+
+    %{settings | tracker: tracker, workspace: workspace, codex: codex, slack: slack, blocked_audit: blocked_audit}
+  end
+
+  defp blocked_audit_default_state_file(workspace_root) when is_binary(workspace_root) do
+    Path.join([workspace_root, ".symphony", "blocked-audits.json"])
   end
 
   defp normalize_keys(value) when is_map(value) do
@@ -434,6 +504,8 @@ defmodule SymphonyElixir.Config.Schema do
         path
     end
   end
+
+  defp resolve_path_value(nil, default), do: default
 
   defp resolve_env_value(value, fallback) when is_binary(value) do
     case env_reference_name(value) do

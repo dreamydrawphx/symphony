@@ -4,8 +4,7 @@ defmodule SymphonyElixir.AgentRunner do
   """
 
   require Logger
-  alias SymphonyElixir.Codex.AppServer
-  alias SymphonyElixir.{Config, Linear.Issue, PromptBuilder, Tracker, Workspace}
+  alias SymphonyElixir.{BlockedAudit, Codex.AppServer, Config, Linear.Issue, PromptBuilder, Tracker, Workspace}
 
   @type worker_host :: String.t() | nil
 
@@ -124,6 +123,13 @@ defmodule SymphonyElixir.AgentRunner do
         {:done, _refreshed_issue} ->
           :ok
 
+        {:paused, refreshed_issue, audit_result} ->
+          Logger.warning(
+            "Paused agent continuations for #{issue_context(refreshed_issue)} same_blocked_audit_count=#{audit_result.same_blocked_audit_count} signature_hash=#{audit_result.signature_hash}"
+          )
+
+          :ok
+
         {:error, reason} ->
           {:error, reason}
       end
@@ -147,11 +153,7 @@ defmodule SymphonyElixir.AgentRunner do
   defp continue_with_issue?(%Issue{id: issue_id} = issue, issue_state_fetcher) when is_binary(issue_id) do
     case issue_state_fetcher.([issue_id]) do
       {:ok, [%Issue{} = refreshed_issue | _]} ->
-        if active_issue_state?(refreshed_issue.state) do
-          {:continue, refreshed_issue}
-        else
-          {:done, refreshed_issue}
-        end
+        continue_with_active_issue?(refreshed_issue)
 
       {:ok, []} ->
         {:done, issue}
@@ -162,6 +164,18 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp continue_with_issue?(issue, _issue_state_fetcher), do: {:done, issue}
+
+  defp continue_with_active_issue?(%Issue{} = refreshed_issue) do
+    if active_issue_state?(refreshed_issue.state) do
+      case BlockedAudit.evaluate_issue(refreshed_issue) do
+        {:ok, %{decision: :paused} = audit_result} -> {:paused, refreshed_issue, audit_result}
+        {:ok, _audit_result} -> {:continue, refreshed_issue}
+        {:error, reason} -> {:error, {:blocked_audit_failed, reason}}
+      end
+    else
+      {:done, refreshed_issue}
+    end
+  end
 
   defp active_issue_state?(state_name) when is_binary(state_name) do
     normalized_state = normalize_issue_state(state_name)

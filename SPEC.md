@@ -587,6 +587,12 @@ not require recognizing or validating extension fields unless that extension is 
 - `agent.max_turns`: integer, default `20`
 - `agent.max_retry_backoff_ms`: integer, default `300000` (5m)
 - `agent.max_concurrent_agents_by_state`: map of positive integers, default `{}`
+- `blocked_audit.pause_threshold`: integer, default `5`
+- `blocked_audit.anomaly_threshold`: integer, default `10`
+- `blocked_audit.state_file`: path, default `<workspace.root>/.symphony/blocked-audits.json`
+- `slack.bot_token`: string or `$VAR`, canonical env `SLACK_BOT_TOKEN`
+- `slack.blocked_audit_channel`: string, default `C0ADCCYAY2V`
+- `slack.manager_mention`: string, default `AJ Marz`
 - `codex.command`: shell command string, default `codex app-server`
 - `codex.approval_policy`: Codex `AskForApproval` value, default implementation-defined
 - `codex.thread_sandbox`: Codex `SandboxMode` value, default implementation-defined
@@ -1801,6 +1807,30 @@ function dispatch_issue(issue, state, attempt):
   state.retry_attempts.remove(issue.id)
   return state
 ```
+
+### 16.4.1 Blocked-Audit Backoff
+
+Implementations MAY define a blocked-audit backoff extension for active issues that repeatedly end
+without changing their blocker state. When implemented, the service MUST persist a
+`blocked_signature` per issue and compare it after each completed turn. The signature MUST include
+at least:
+
+- issue id and current status
+- blocking issue ids
+- blocking labels
+- required review gates
+- open PR ids or URLs and review states when the tracker exposes them
+- other dependency gates that materially explain the block
+
+If the signature is unchanged, `same_blocked_audit_count` increments. If the signature changes, the
+count resets and any pause for the prior signature is cleared.
+
+At the 5th unchanged blocked audit, the service MUST pause further continuations for that issue,
+post a manager summary to the issue, and send a Slack alert to channel `C0ADCCYAY2V` that explicitly
+mentions AJ Marz. At the 10th unchanged blocked audit, it MUST keep the pause active, flag the event
+as a workflow anomaly / manager-review escalation, and send a stronger Slack alert to the same
+channel. Alerts MUST dedupe once per threshold per issue per unchanged signature; a later changed
+signature may trigger thresholds again.
 
 ### 16.5 Worker Attempt (Workspace + Prompt + Agent)
 

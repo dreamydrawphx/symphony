@@ -31,6 +31,15 @@ defmodule SymphonyElixir.Linear.Client do
             name
           }
         }
+        attachments {
+          nodes {
+            id
+            title
+            url
+            source
+            metadata
+          }
+        }
         inverseRelations(first: $relationFirst) {
           nodes {
             type
@@ -39,6 +48,11 @@ defmodule SymphonyElixir.Linear.Client do
               identifier
               state {
                 name
+              }
+              labels {
+                nodes {
+                  name
+                }
               }
             }
           }
@@ -76,6 +90,15 @@ defmodule SymphonyElixir.Linear.Client do
             name
           }
         }
+        attachments {
+          nodes {
+            id
+            title
+            url
+            source
+            metadata
+          }
+        }
         inverseRelations(first: $relationFirst) {
           nodes {
             type
@@ -84,6 +107,11 @@ defmodule SymphonyElixir.Linear.Client do
               identifier
               state {
                 name
+              }
+              labels {
+                nodes {
+                  name
+                }
               }
             }
           }
@@ -460,6 +488,7 @@ defmodule SymphonyElixir.Linear.Client do
       assignee_id: assignee_field(assignee, "id"),
       blocked_by: extract_blockers(issue),
       labels: extract_labels(issue),
+      pull_requests: extract_pull_requests(issue),
       assigned_to_worker: assigned_to_worker?(assignee, assignee_filter),
       created_at: parse_datetime(issue["createdAt"]),
       updated_at: parse_datetime(issue["updatedAt"])
@@ -558,7 +587,8 @@ defmodule SymphonyElixir.Linear.Client do
             %{
               id: blocker_issue["id"],
               identifier: blocker_issue["identifier"],
-              state: get_in(blocker_issue, ["state", "name"])
+              state: get_in(blocker_issue, ["state", "name"]),
+              labels: extract_labels(blocker_issue)
             }
           ]
         else
@@ -571,6 +601,46 @@ defmodule SymphonyElixir.Linear.Client do
   end
 
   defp extract_blockers(_), do: []
+
+  defp extract_pull_requests(%{"attachments" => %{"nodes" => attachments}}) when is_list(attachments) do
+    attachments
+    |> Enum.flat_map(fn
+      %{"url" => url} = attachment when is_binary(url) ->
+        if github_pull_request_url?(url) do
+          [
+            %{
+              id: attachment["id"],
+              title: attachment["title"],
+              url: url,
+              source: attachment["source"],
+              review_state: pull_request_review_state(attachment["metadata"])
+            }
+          ]
+        else
+          []
+        end
+
+      _ ->
+        []
+    end)
+  end
+
+  defp extract_pull_requests(_), do: []
+
+  defp github_pull_request_url?(url) when is_binary(url) do
+    String.contains?(url, "github.com/") and String.contains?(url, "/pull/")
+  end
+
+  defp pull_request_review_state(metadata) when is_map(metadata) do
+    Enum.find_value(["reviewState", "reviewDecision", "state", "status"], "unknown", fn key ->
+      case Map.get(metadata, key) do
+        value when is_binary(value) and value != "" -> value
+        _ -> nil
+      end
+    end)
+  end
+
+  defp pull_request_review_state(_metadata), do: "unknown"
 
   defp parse_datetime(nil), do: nil
 

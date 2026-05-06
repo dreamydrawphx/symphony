@@ -98,6 +98,13 @@ hooks:
 agent:
   max_concurrent_agents: 10
   max_turns: 20
+slack:
+  bot_token: $SLACK_BOT_TOKEN
+  blocked_audit_channel: "C0ADCCYAY2V"
+  manager_mention: "AJ Marz"
+blocked_audit:
+  pause_threshold: 5
+  anomaly_threshold: 10
 codex:
   command: codex app-server
 ---
@@ -121,6 +128,17 @@ Notes:
   Symphony validation.
 - `agent.max_turns` caps how many back-to-back Codex turns Symphony will run in a single agent
   invocation when a turn completes normally but the issue is still in an active state. Default: `20`.
+- `blocked_audit.pause_threshold` defaults to `5`; an unchanged blocked signature at that count
+  pauses further continuations for the issue and posts a manager summary plus a Slack alert.
+- `blocked_audit.anomaly_threshold` defaults to `10`; an unchanged blocked signature at that count
+  keeps continuations paused and escalates as a workflow anomaly.
+- The blocked signature includes issue id, status, blocker ids/states/labels, issue labels, required
+  review-gate labels, open GitHub PR attachments with review state when Linear provides it, and
+  dependency metadata such as branch name. Alerts dedupe once per threshold per unchanged signature,
+  and a changed signature clears the pause.
+- `slack.bot_token` reads from `SLACK_BOT_TOKEN` when unset or when value is `$SLACK_BOT_TOKEN`.
+  `slack.blocked_audit_channel` defaults to `C0ADCCYAY2V`, and `slack.manager_mention` defaults to
+  `AJ Marz`.
 - If the Markdown body is blank, Symphony uses a default prompt template that includes the issue
   identifier, title, and body.
 - Use `hooks.after_create` to bootstrap a fresh workspace. For a Git-backed repo, you can run
